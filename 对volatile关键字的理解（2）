@@ -1,0 +1,65 @@
+package threads;
+
+public class VolatileTest {
+	public static int count = 0;
+	public static void main(String[] args){
+		//开启10个线程
+		for(int i=0;i<10;i++){
+			new Thread(new Runnable(){
+				@Override
+				public void run(){
+					try{
+						Thread.sleep(1);
+					}
+					catch(InterruptedException e){
+						e.printStackTrace();
+					}
+					for(int j=0;j<100;j++){
+						count++;
+					}
+				} 
+			}).start();
+		}
+		try{
+			Thread.sleep(100);
+		}
+		catch(InterruptedException e){
+			e.printStackTrace();
+		}
+		System.out.println("count="+count);
+	}
+
+}
+//开启10个线程，让每个线程中的静态变量count自增100次，执行后会发现，最终count的值未必是1000，有可能小于1000.
+  使用volatile修饰的变量，为什么并发自增的时候会出现这样的问题呢？这是因为count++这一行代码本身并不是原子性操作，在字节码层面可以拆分成如下指令：
+
+getstatic        //读取静态变量（count）
+iconst_1        //定义常量1
+iadd               //count增加1
+putstatic        //把count结果同步到主内存
+
+虽然每一次执行 getstatic 的时候，获取到的都是主内存的最新变量值，但是进行iadd的时候，由于并不是原子性操作，
+其他线程在这过程中很可能让count自增了很多次。这样一来本线程所计算更新的是一个陈旧的count值，自然无法做到线程安全。
+因此，什么时候适合用volatile呢？
+
+1.运行结果并不依赖变量的当前值，或者能够确保只有单一的线程修改变量的值。
+
+2.变量不需要与其他的状态变量共同参与不变约束。
+
+
+第一条很好理解，就是上面的代码例子。第二条是什么意思呢？可以看看下面这个场景：
+
+volatile static int start = 3;
+volatile static int end = 6;
+
+线程A执行如下代码：
+while (start < end){
+  //do something
+}
+
+线程B执行如下代码：
+start+=3;
+end+=3;
+
+这种情况下，一旦在线程A的循环中执行了线程B，start有可能先更新成6，
+造成了一瞬间 start == end，从而跳出while循环的可能性。
